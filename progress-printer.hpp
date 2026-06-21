@@ -34,10 +34,7 @@ private:
 		std::cout << "\x1b[2K\r";
 	}
 
-	inline static const std::string PROGESS_BAR_LUT[9] = {
-		" ", "▏", "▎", "▍",
-		"▌", "▋", "▊", "▉", "█"
-	};
+	const static std::string PROGESS_BAR_LUT[9];
 
 
 	/**
@@ -84,7 +81,7 @@ private:
 	// The thread responsible for printing the progress to the terminal
 	std::thread printer_thread;
 	// Killswitch
-	std::atomic_bool running = true;
+	std::atomic_bool running;
 
 	std::chrono::time_point<std::chrono::high_resolution_clock> t_start;
 
@@ -142,7 +139,7 @@ private:
 
 public:
 	// Current number of completed tasks. Can be updated at any time.
-	std::atomic_size_t completed_tasks = 0;
+	std::atomic_size_t completed_tasks;
 
 	/**
 	 * @brief Goal of tasks to complete. If this is less than or equal to
@@ -154,12 +151,12 @@ public:
 	 * @brief Width of the progress bar. I don't see a reason why you would
 	 * want to change this at runtime, but it also wouldn't break anything.
 	 */
-	std::atomic_size_t progress_bar_width = 50;
+	std::atomic_size_t progress_bar_width;
 
 	/**
 	 * @brief Number of milliseconds to sleep between progress reports.
 	 */
-	std::atomic_size_t polling_interval = 100;
+	std::atomic_size_t polling_interval;
 
 
 	/**
@@ -174,7 +171,9 @@ public:
 	ProgressPrinter(size_t goal, size_t width = 50, size_t polling_interval = 100) :
 		task_completion_goal(goal),
 		progress_bar_width(width),
-		polling_interval(polling_interval)
+		polling_interval(polling_interval),
+		running(true),
+		completed_tasks(0)
 	{
 		printer_thread = std::thread([this](){ printer_thread_fn(); });
 	}
@@ -195,6 +194,11 @@ public:
 };
 
  
+const std::string ProgressPrinter::PROGESS_BAR_LUT[9] = {
+	" ", "▏", "▎", "▍",
+	"▌", "▋", "▊", "▉", "█"
+};
+
 
 std::string ProgressPrinter::fmt_time(size_t milliseconds)
 {
