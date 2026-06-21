@@ -1,16 +1,14 @@
 #ifndef PROGRESS_PRINTER_HPP
 #define PROGRESS_PRINTER_HPP
 
+#include <string>
 #include <atomic>
+#include <thread>
 #include <chrono>
 #include <cstddef>
 #include <cstdio>
 #include <iomanip>
-#include <ios>
 #include <iostream>
-#include <ostream>
-#include <string>
-#include <thread>
 
 
 
@@ -24,12 +22,31 @@ private:
 	/**
 	 * @brief Format a time in milliseconds into a human-readable string
 	 */
-	inline static std::string fmt_time(size_t milliseconds);
+	static std::string fmt_time(size_t milliseconds)
+	{
+		size_t seconds = milliseconds / 1000;
+		size_t minutes = seconds / 60;
+		size_t hours = minutes / 60;
+
+		char *tmp;
+		asprintf(&tmp, "%02ld:%02ld:%02ld.%01ld",
+			hours, minutes % 60, seconds % 60, (milliseconds % 1000) / 100
+		);
+
+		if (!tmp)
+			return "";
+
+		std::string result = tmp;
+
+		free(tmp);
+
+		return result;
+	}
 
 	/**
 	 * @brief Clear the line of the terminal
 	 */
-	inline static void clear_line()
+	static void clear_line()
 	{
 		std::cout << "\x1b[2K\r";
 	}
@@ -202,30 +219,6 @@ const std::string ProgressPrinter::PROGESS_BAR_LUT[9] = {
 
 std::string ProgressPrinter::fmt_time(size_t milliseconds)
 {
-	size_t seconds = milliseconds / 1000;
-	size_t minutes = seconds / 60;
-	size_t hours = minutes / 60;
-
-#ifdef __cpp_lib_format
-#include <format>
-	return std::format("{:0>2}:{:0>2}:{:0>2}.{:0>1}",
-		hours, minutes % 60, seconds % 60, (milliseconds % 1000) / 100
-	);
-#else
-	char *tmp;
-	asprintf(&tmp, "%02ld:%02ld:%02ld.%01ld",
-		hours, minutes % 60, seconds % 60, (milliseconds % 1000) / 100
-	);
-
-	if (!tmp)
-		return "";
-
-	std::string result = tmp;
-
-	free(tmp);
-
-	return result;
-#endif
 }
 
 
