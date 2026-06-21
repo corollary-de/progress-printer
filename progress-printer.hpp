@@ -32,62 +32,59 @@ private:
 		asprintf(&tmp, "%02ld:%02ld:%02ld.%01ld",
 			hours, minutes % 60, seconds % 60, (milliseconds % 1000) / 100
 		);
-
 		if (!tmp)
 			return "";
 
 		std::string result = tmp;
-
 		free(tmp);
-
 		return result;
 	}
 
-	/**
-	 * @brief Clear the line of the terminal
-	 */
-	static void clear_line()
-	{
-		std::cout << "\x1b[2K\r";
-	}
-
-	const static std::string PROGESS_BAR_LUT[9];
 
 	/**
 	 * @brief Prints a progress bar at a given width
 	 * 
-	 * @param progress progress ranging from 0 to 1
-	 * @param width width in chars of the progress bar
+	 * @param progress - progress ranging from 0 to 1
+	 * @param width - width in chars of the progress bar
 	 */
 	inline static void print_progressbar(double progress, size_t width)
 	{
-		if (progress < 1) {
-			std::cout << "\x1b[33m"		// Yellow
-					  << "[ " 
-					  << std::setprecision(3) 
-					  << std::setw(5);
+		const std::string PROGESS_BAR_LUT[9] = {
+			" ", "▏", "▎",
+			"▍", "▌", "▋",
+			"▊", "▉", "█"
+		};
+
+		const std::string ANSI_GREEN = "\x1b[32m";
+		const std::string ANSI_YELLOW = "\x1b[33m";
+		const std::string ANSI_GREY_BG = "\x1b[40m";
+		const std::string ANSI_RESET = "\x1b[0m";
+
+		if (progress < 1){
+			std::cout << ANSI_YELLOW + "[" 
+					  << std::setprecision(3) << std::setw(5);
+
 			std::left(std::cout);
 			std::cout << progress * 100;
 			std::right(std::cout);
-			std::cout << "% ] "
-					  << "\x1b[40m";	// Grey BG
+
+			std::cout << "% ] " + ANSI_GREY_BG;
 
 			for (int i = 0; i < width; i++) {
 				int bar_i = static_cast<int>(progress * 8 * width) - 8 * i;
-				bar_i = bar_i > 8 ? 8 : bar_i;
+				bar_i = bar_i > 8 ? 8 : bar_i;	// std::clamp is c++17
 				bar_i = bar_i < 0 ? 0 : bar_i;
 				std::cout << PROGESS_BAR_LUT[bar_i];
 			}
 
-			std::cout << "\x1b[0m"; // Clear
+			std::cout << ANSI_RESET;
 		} else {
-			std::cout << "\x1b[32m" // Green
-					  << "[  Done  ] ";
+			std::cout << ANSI_GREEN + "[  Done  ]";
 
 			for (int i = 0; i < width; i++)
 				std::cout << PROGESS_BAR_LUT[8];
 
-			std::cout << "\x1b[0m"; // Clear
+			std::cout << ANSI_RESET;
 		}
 
 	}
@@ -96,20 +93,10 @@ private:
 private:
 	// The thread responsible for printing the progress to the terminal
 	std::thread printer_thread;
-	// Killswitch
+	// Offswitch
 	std::atomic_bool running;
 
 	std::chrono::time_point<std::chrono::high_resolution_clock> t_start;
-
-	/**
-	 * @brief Return the number of milliseconds since start of progess printing
-	 */
-	size_t get_elapsed_milliseconds()
-	{
-		return std::chrono::duration_cast<std::chrono::milliseconds>(
-			std::chrono::high_resolution_clock::now() - t_start
-		).count();
-	}
 
 
 	/**
@@ -118,11 +105,14 @@ private:
 	void print_progress_line()
 	{
 		double progress = static_cast<double>(completed_tasks) / task_completion_goal;
-		size_t elapsed_ms = get_elapsed_milliseconds();
+
+		size_t elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+			std::chrono::high_resolution_clock::now() - t_start
+		).count();
+
 		size_t eta_ms = elapsed_ms * (1. - progress) / progress;
 
-		clear_line();
-
+		std::cout << "\x1b[2K\r"; // Clear line of terminal
 		std::cout << fmt_time(elapsed_ms) << " ";
 
 		print_progressbar(progress, progress_bar_width);
@@ -140,8 +130,6 @@ private:
 		t_start = std::chrono::high_resolution_clock::now();
 
 		while (running) {
-			size_t eta_ms = get_elapsed_milliseconds();
-
 			print_progress_line();
 
 			std::this_thread::sleep_for(
@@ -208,13 +196,6 @@ public:
 		std::cout << "\n";
 	}
 };
-
- 
-const std::string ProgressPrinter::PROGESS_BAR_LUT[9] = {
-	" ", "▏", "▎", "▍",
-	"▌", "▋", "▊", "▉", "█"
-};
-
 
 
 #endif // PROGRESS_PRINTER_HPP
