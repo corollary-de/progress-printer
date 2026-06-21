@@ -1,2 +1,4 @@
 # progress-printer
-Simple c++ header-only async progress printer
+Simple c++11 header-only async progress printer.
+
+ETA is calculated from a simple linear runtime extrapolation.
