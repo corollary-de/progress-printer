@@ -24,7 +24,7 @@ int main()
 
 		std::for_each(std::execution::par_unseq, I.begin(), I.end(),
 		[&progress](size_t i){
-			progress.completed_tasks += 1;
+			progress.completed_tasks++;
 		}
 		);
 	}
@@ -37,9 +37,32 @@ int main()
 
 		std::for_each(std::execution::par_unseq, I.begin(), I.end(),
 		[&progress](size_t i){
-			progress.completed_tasks += 1;
+			progress.completed_tasks++;
 		}
 		);
+	}
+
+	{
+		std::cout << "Moving Goalpost:\n";
+		size_t n = 1UL << 26;
+		ProgressPrinter progress(n, 100, 17);
+
+		const size_t factor[] = { 1, 3, 9, 27 };
+		const size_t divisor[] = { 1, 2, 4, 8 };
+
+		for (int step = 0; step < 4; step++)
+		{
+			auto I = std::ranges::iota_view(0UL, n * factor[step] / divisor[step]);
+
+			std::for_each(std::execution::par_unseq, I.begin(), I.end(),
+			[&progress](size_t i){
+				progress.completed_tasks++;
+			}
+			);
+
+			if (step < 3)
+				progress.task_completion_goal += n * factor[step + 1] / divisor[step + 1];
+		}
 	}
 }
 

@@ -20,7 +20,7 @@ int main()
 
 		for (size_t i = 0; i < n; i++)
 		{
-			progress.completed_tasks += 1;
+			progress.completed_tasks++;
 			std::this_thread::sleep_for(std::chrono::milliseconds(1));
 		}
 	}
