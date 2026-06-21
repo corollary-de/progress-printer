@@ -53,7 +53,6 @@ private:
 
 	const static std::string PROGESS_BAR_LUT[9];
 
-
 	/**
 	 * @brief Prints a progress bar at a given width
 	 * 
@@ -215,11 +214,6 @@ const std::string ProgressPrinter::PROGESS_BAR_LUT[9] = {
 	" ", "▏", "▎", "▍",
 	"▌", "▋", "▊", "▉", "█"
 };
-
-
-std::string ProgressPrinter::fmt_time(size_t milliseconds)
-{
-}
 
 
 
