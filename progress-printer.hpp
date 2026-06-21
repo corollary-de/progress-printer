@@ -2,7 +2,7 @@
  * @file progress-printer.hpp
  * @author Chloé Franke (git@corollary.de)
  * @brief C++11 header-only async progress printer
- * @version 1.0.0
+ * @version 1.1.0
  * @date 2026-06-22
  * 
  * @copyright Copyright (c) 2026
