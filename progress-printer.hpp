@@ -1,6 +1,18 @@
+/**
+ * @file progress-printer.hpp
+ * @author Chloé Franke (git@corollary.de)
+ * @brief C++11 header-only async progress printer
+ * @version 1.0.0
+ * @date 2026-06-22
+ * 
+ * @copyright Copyright (c) 2026
+ * 
+ */
+
 #ifndef PROGRESS_PRINTER_HPP
 #define PROGRESS_PRINTER_HPP
 
+#include <array>
 #include <string>
 #include <atomic>
 #include <thread>
@@ -12,8 +24,67 @@
 
 
 
+
+namespace _progress_printer_internal {
+
+struct perf_sample
+{
+	std::chrono::time_point<std::chrono::high_resolution_clock> tp;
+	size_t count;
+};
+
+
+struct perf_tracker
+{
+	const static size_t N = 25;
+	std::array<perf_sample, N> points;
+
+	size_t i_first = 0;
+	size_t i_last = 0;
+
+	perf_tracker()
+	{
+		points[0] = {
+			std::chrono::high_resolution_clock::now(),
+			0
+		};
+	}
+
+
+	void update(size_t with)
+	{
+		i_last = ++i_last % N;
+
+		if (i_last == i_first)
+			i_first = ++i_first % N;
+
+		points[i_last] = {
+			std::chrono::high_resolution_clock::now(),
+			with
+		};
+	}
+
+
+	double estimate_rate()
+	{
+		return static_cast<double>(
+			std::chrono::duration_cast<std::chrono::milliseconds>(
+				points[i_last].tp - points[i_first].tp
+			).count()
+		) / (
+			points[i_last].count - points[i_first].count
+		);
+	}
+};
+
+
+}
+
+
+
+
 /**
- * @brief Sinple async progress printer.
+ * @brief Simple async progress printer.
  * Printer thread is started by the constructor and stopped by the deconstructor.
  */
 class ProgressPrinter
@@ -61,7 +132,7 @@ private:
 		const std::string ANSI_RESET = "\x1b[0m";
 
 		if (progress < 1){
-			std::cout << ANSI_YELLOW + "[" 
+			std::cout << ANSI_YELLOW + "[ " 
 					  << std::setprecision(3) << std::setw(5);
 
 			std::left(std::cout);
@@ -96,7 +167,11 @@ private:
 	// Offswitch
 	std::atomic_bool running;
 
+	// Time at start of progress printing
 	std::chrono::time_point<std::chrono::high_resolution_clock> t_start;
+
+
+	_progress_printer_internal::perf_tracker performance;
 
 
 	/**
@@ -106,18 +181,22 @@ private:
 	{
 		double progress = static_cast<double>(completed_tasks) / task_completion_goal;
 
+		auto now = std::chrono::high_resolution_clock::now();
+
 		size_t elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-			std::chrono::high_resolution_clock::now() - t_start
+			now - t_start
 		).count();
 
-		size_t eta_ms = elapsed_ms * (1. - progress) / progress;
+		size_t eta_ms = performance.estimate_rate() * (task_completion_goal - completed_tasks);
 
 		std::cout << "\x1b[2K\r"; // Clear line of terminal
 		std::cout << fmt_time(elapsed_ms) << " ";
 
 		print_progressbar(progress, progress_bar_width);
 
-		std::cout << " ETA: " << fmt_time(eta_ms);
+		if (completed_tasks < task_completion_goal)
+			std::cout << " ETA: " << fmt_time(eta_ms);
+
 		std::flush(std::cout);
 	}
 
@@ -130,6 +209,7 @@ private:
 		t_start = std::chrono::high_resolution_clock::now();
 
 		while (running) {
+			performance.update(completed_tasks);
 			print_progress_line();
 
 			std::this_thread::sleep_for(

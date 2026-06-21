@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <execution>
 #include <iostream>
+#include <ratio>
 #include <thread>
 #include <ranges>
 
@@ -62,6 +63,24 @@ int main()
 
 			if (step < 3)
 				progress.task_completion_goal += n * factor[step + 1] / divisor[step + 1];
+		}
+	}
+
+	{
+		std::cout << "Variable speed:\n";
+		size_t n = 1UL << 22;
+		ProgressPrinter progress(n, 50, 10);
+
+		for (int step = 0; step < 4; step++)
+		{
+			auto I = std::ranges::iota_view(0UL, n / 4);
+
+			std::for_each(std::execution::par_unseq, I.begin(), I.end(),
+			[&progress, step](size_t i){
+				progress.completed_tasks++;
+				std::this_thread::sleep_for(std::chrono::microseconds(5 << (step * 2)));
+			}
+			);
 		}
 	}
 }
