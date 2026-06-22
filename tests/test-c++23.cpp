@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <execution>
 #include <iostream>
@@ -81,6 +82,17 @@ int main()
 				std::this_thread::sleep_for(std::chrono::microseconds(5 << (step * 2)));
 			}
 			);
+		}
+	}
+
+	{
+		std::cout << "Sin Wave:\n";
+		ProgressPrinter progress(400);
+
+		for (float x = 0; x < 10; x += 0.01)
+		{
+			progress.completed_tasks = (std::sin(x) + 1) * 200;
+			std::this_thread::sleep_for(std::chrono::milliseconds(10));
 		}
 	}
 }

@@ -116,7 +116,7 @@ private:
 	 * @brief Prints a progress bar at a given width
 	 * 
 	 * @param progress - progress ranging from 0 to 1
-	 * @param width - width in chars of the progress bar
+	 * @param width - width of the progress bar in chars
 	 */
 	inline static void print_progressbar(double progress, size_t width)
 	{
@@ -150,7 +150,7 @@ private:
 
 			std::cout << ANSI_RESET;
 		} else {
-			std::cout << ANSI_GREEN + "[  Done  ]";
+			std::cout << ANSI_GREEN + "[  Done  ] ";
 
 			for (int i = 0; i < width; i++)
 				std::cout << PROGESS_BAR_LUT[8];
