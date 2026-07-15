@@ -162,6 +162,9 @@ private:
 
 
 private:
+	// Whether this is just a dummy object that doesn't do anything.
+	bool is_dummy;
+
 	// The thread responsible for printing the progress to the terminal
 	std::thread printer_thread;
 	// Offswitch
@@ -251,14 +254,23 @@ public:
 	 * @param goal - Number of tasks for completion
 	 * @param width - Width of the progress bar
 	 * @param polling_interval - Number of milliseconds to sleep between progress prints
+	 * @param dummy - Don't print anything, don't start a thread, just exist.
+	 * Useful for if your program has a '--quiet' parameter
 	 */
-	ProgressPrinter(size_t goal, size_t width = 50, size_t polling_interval = 100) :
+	ProgressPrinter(
+		size_t goal,
+		size_t width = 50,
+		size_t polling_interval = 100,
+		bool dummy = false
+	) :
+		is_dummy(dummy),
 		task_completion_goal(goal),
 		progress_bar_width(width),
 		polling_interval(polling_interval),
 		running(true),
 		completed_tasks(0)
 	{
+		if (is_dummy) return;
 		printer_thread = std::thread([this](){ printer_thread_fn(); });
 	}
 
@@ -269,6 +281,8 @@ public:
 	 */
 	~ProgressPrinter()
 	{
+		if (is_dummy) return;
+
 		// Kill printer thread
 		running = false;
 		printer_thread.join();
