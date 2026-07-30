@@ -2,7 +2,7 @@
  * 	Tests for c++11 compliance. Compile with -std=c++11.
  */
 
-#include "progress-printer.hpp"
+#include "../progress-printer.hpp"
 
 #include <cstddef>
 #include <iostream>

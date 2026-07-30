@@ -13,6 +13,10 @@
 #define PROGRESS_PRINTER_HPP
 
 #include <array>
+#include <cmath>
+#include <ostream>
+#include <sstream>
+#include <stdexcept>
 #include <string>
 #include <atomic>
 #include <thread>
@@ -27,6 +31,10 @@
 
 namespace _progress_printer_internal {
 
+/**
+ * @brief Represents a sample of performance, that is a progress count value
+ * and the time at which it was sampled
+ */
 struct perf_sample
 {
 	std::chrono::time_point<std::chrono::high_resolution_clock> tp;
@@ -34,12 +42,21 @@ struct perf_sample
 };
 
 
+/**
+ * @brief Represents a ring buffer of performance samples with a method
+ * to estimate a rate `time / progress count` over this buffer.
+ * 
+ */
 struct perf_tracker
 {
+	// Size of the buffer
 	const static size_t N = 25;
+	// Samples
 	std::array<perf_sample, N> points;
 
+	// Index of first element
 	size_t i_first = 0;
+	// Index of last element
 	size_t i_last = 0;
 
 	perf_tracker()
@@ -51,7 +68,12 @@ struct perf_tracker
 	}
 
 
-	void update(size_t with)
+	/**
+	 * @brief Add another point of progress to the ring buffer
+	 * 
+	 * @param with progress count value to add
+	 */
+	void update(size_t with) noexcept
 	{
 		i_last = ++i_last % N;
 
@@ -65,17 +87,39 @@ struct perf_tracker
 	}
 
 
-	double estimate_rate()
+	/**
+	 * @brief Return an estimate of `time / progress count` calculated
+	 * via linear extrapolation on the internal ring buffer.
+	 * 
+	 * @return Rate estimate or NaN if change in count is 0
+	 */
+	double estimate_rate() noexcept
 	{
-		return static_cast<double>(
-			std::chrono::duration_cast<std::chrono::milliseconds>(
-				points[i_last].tp - points[i_first].tp
-			).count()
-		) / (
-			points[i_last].count - points[i_first].count
-		);
+		size_t delta_count = points[i_last].count - points[i_first].count;
+		if (delta_count == 0) return NAN;
+
+		double delta_t = std::chrono::duration_cast<std::chrono::milliseconds>(
+			points[i_last].tp - points[i_first].tp
+		).count();
+
+		return delta_t / delta_count;
 	}
 };
+
+
+/**
+ * @brief Clamp a value between low and high, since std::clamp is c++17
+ * 
+ * @param value Value to return clamped
+ * @param low Lower bound (inclusive)
+ * @param high Upper bound (inclusive)
+ * @return Value clamped between low and high
+ */
+inline int clamp(int value, int low, int high) {
+	value = value > high ? high : value;
+	value = value < low ? low : value;
+	return value;
+}
 
 
 }
@@ -93,22 +137,38 @@ private:
 	/**
 	 * @brief Format a time in milliseconds into a human-readable string
 	 */
-	static std::string fmt_time(size_t milliseconds)
+	static std::string fmt_time(size_t milliseconds) noexcept
 	{
 		size_t seconds = milliseconds / 1000;
 		size_t minutes = seconds / 60;
 		size_t hours = minutes / 60;
+		size_t days = hours / 24;
+		milliseconds = (milliseconds % 1000) / 100;
+		seconds %= 60;
+		minutes %= 60;
+		hours %= 24;
 
-		char *tmp;
-		asprintf(&tmp, "%02ld:%02ld:%02ld.%01ld",
-			hours, minutes % 60, seconds % 60, (milliseconds % 1000) / 100
-		);
-		if (!tmp)
-			return "";
+		std::ostringstream oss;
 
-		std::string result = tmp;
-		free(tmp);
-		return result;
+		// > 1 Year is not a reasonable time and probably 
+		// an ETA resulting from a progress rate of 0
+		if (days > 365) {
+			oss << "Unknown";
+		} else if (days > 0) {
+			oss << days << "d "
+				<< std::setfill('0') << std::setw(2) << hours << ":"
+				<< std::setfill('0') << std::setw(2) << minutes;
+		} else if (hours > 0) {
+			oss << std::setfill('0') << std::setw(2) << hours << ":"
+				<< std::setfill('0') << std::setw(2) << minutes << ":"
+				<< std::setfill('0') << std::setw(2) << seconds;
+		} else {
+			oss << std::setfill('0') << std::setw(2) << minutes << ":"
+				<< std::setfill('0') << std::setw(2) << seconds << "."
+				<< std::setfill('0') << std::setw(1) << milliseconds;
+			}
+
+		return oss.str();
 	}
 
 
@@ -118,42 +178,49 @@ private:
 	 * @param progress - progress ranging from 0 to 1
 	 * @param width - width of the progress bar in chars
 	 */
-	inline static void print_progressbar(double progress, size_t width)
+	inline static void print_progressbar(double progress, size_t width) noexcept
 	{
-		const std::string PROGESS_BAR_LUT[9] = {
-			" ", "▏", "▎",
-			"▍", "▌", "▋",
-			"▊", "▉", "█"
-		};
-
-		const std::string ANSI_GREEN = "\x1b[32m";
-		const std::string ANSI_YELLOW = "\x1b[33m";
-		const std::string ANSI_GREY_BG = "\x1b[40m";
+		const std::string BAR_COLOR_COMPLETE = "\x1b[32m";		// Green
+		const std::string BAR_COLOR_INCOMPLETE = "\x1b[33m";	// Yellow
+		const std::string BAR_COLOR_BACKGROUND = "\x1b[40m";	// Gray
 		const std::string ANSI_RESET = "\x1b[0m";
 
+		const std::string PROGRESS_BAR_LUT[9] = {
+				" ", "▏", "▎",
+				"▍", "▌", "▋",
+				"▊", "▉", "█"
+		};
+
 		if (progress < 1){
-			std::cout << ANSI_YELLOW + "[ " 
-					  << std::setprecision(3) << std::setw(5);
+			std::cout << BAR_COLOR_INCOMPLETE + "[ ";
 
-			std::left(std::cout);
-			std::cout << progress * 100;
-			std::right(std::cout);
+			std::cout << std::left << std::setprecision(3) << std::setw(5)
+					  << progress * 100 << std::right;
 
-			std::cout << "% ] " + ANSI_GREY_BG;
+			std::cout << "% ] " + BAR_COLOR_BACKGROUND;
 
-			for (int i = 0; i < width; i++) {
-				int bar_i = static_cast<int>(progress * 8 * width) - 8 * i;
-				bar_i = bar_i > 8 ? 8 : bar_i;	// std::clamp is c++17
-				bar_i = bar_i < 0 ? 0 : bar_i;
-				std::cout << PROGESS_BAR_LUT[bar_i];
+			const size_t subdiv = 8; // 8 subdivisions per char of the progress bar
+
+			size_t bar_position = progress * width * subdiv;
+
+			for (int i = 0; i < width * subdiv; i += subdiv) {
+				if (i + 8 < bar_position)
+					// Bar position is to the right, so this cell is filled in
+					std::cout << PROGRESS_BAR_LUT[8];
+				else if (i > bar_position)
+					// Bar position is to the left, so this cell is not filled in
+					std::cout << PROGRESS_BAR_LUT[0];
+				else
+					// Bar position is in this cell, so choose according subdivision
+					std::cout << PROGRESS_BAR_LUT[bar_position - i];
 			}
 
 			std::cout << ANSI_RESET;
 		} else {
-			std::cout << ANSI_GREEN + "[  Done  ] ";
+			std::cout << BAR_COLOR_COMPLETE + "[  Done  ] ";
 
 			for (int i = 0; i < width; i++)
-				std::cout << PROGESS_BAR_LUT[8];
+				std::cout << PROGRESS_BAR_LUT[8];
 
 			std::cout << ANSI_RESET;
 		}
@@ -165,10 +232,16 @@ private:
 	// Whether this is just a dummy object that doesn't do anything.
 	bool is_dummy;
 
+	// Width of the progress bar.
+	size_t progress_bar_width;
+
+	// Number of milliseconds to sleep between progress reports.
+	size_t polling_interval;
+
 	// The thread responsible for printing the progress to the terminal
 	std::thread printer_thread;
 	// Offswitch
-	std::atomic_bool running;
+	std::atomic<bool> running;
 
 	// Time at start of progress printing
 	std::chrono::time_point<std::chrono::high_resolution_clock> t_start;
@@ -180,9 +253,14 @@ private:
 	/**
 	 * @brief Print an individual line of progress
 	 */
-	void print_progress_line()
+	void print_progress_line() noexcept
 	{
-		double progress = static_cast<double>(completed_tasks) / task_completion_goal;
+		const std::string ANSI_CLEAR_LINE = "\x1b[2K\r";
+
+		// Lock in values so they can't be changed while print_progress_line
+		// is running and guard against 0
+		size_t goal = task_completion_goal;
+		size_t complete = completed_tasks;
 
 		auto now = std::chrono::high_resolution_clock::now();
 
@@ -190,24 +268,32 @@ private:
 			now - t_start
 		).count();
 
-		size_t eta_ms = performance.estimate_rate() * (task_completion_goal - completed_tasks);
+		double rate = performance.estimate_rate();
+		size_t eta_ms;
+		if (rate < 0 || std::isnan(rate))
+			eta_ms = ~(0UL);
+		else
+			eta_ms = rate * (goal - complete);
 
-		std::cout << "\x1b[2K\r"; // Clear line of terminal
+		std::cout << ANSI_CLEAR_LINE; // Clear line of terminal
 		std::cout << fmt_time(elapsed_ms) << " ";
 
-		print_progressbar(progress, progress_bar_width);
+		if (goal > 0) {
+			double progress = static_cast<double>(complete) / goal;
+			print_progressbar(progress, progress_bar_width);
+		}
 
-		if (completed_tasks < task_completion_goal)
+		if (complete < goal)
 			std::cout << " ETA: " << fmt_time(eta_ms);
 
-		std::flush(std::cout);
+		std::cout << std::flush;
 	}
 
 
 	/**
 	 * @brief Function executed by printer_thread
 	 */
-	void printer_thread_fn()
+	void printer_thread_fn() noexcept
 	{
 		t_start = std::chrono::high_resolution_clock::now();
 
@@ -226,25 +312,13 @@ private:
 
 public:
 	// Current number of completed tasks. Can be updated at any time.
-	std::atomic_size_t completed_tasks;
+	std::atomic<size_t> completed_tasks;
 
 	/**
 	 * @brief Goal of tasks to complete. If this is less than or equal to
 	 * completed_tasks, the progress is considered complete
 	 */
-	std::atomic_size_t task_completion_goal;
-
-	/**
-	 * @brief Width of the progress bar. I don't see a reason why you would
-	 * want to change this at runtime, but it also wouldn't break anything.
-	 */
-	std::atomic_size_t progress_bar_width;
-
-	/**
-	 * @brief Number of milliseconds to sleep between progress reports.
-	 */
-	std::atomic_size_t polling_interval;
-
+	std::atomic<size_t> task_completion_goal;
 
 	/**
 	 * @brief Construct a new Progress Printer object;
@@ -271,6 +345,7 @@ public:
 		completed_tasks(0)
 	{
 		if (is_dummy) return;
+		if (polling_interval == 0) throw std::invalid_argument("Polling interval may not be 0");
 		printer_thread = std::thread([this](){ printer_thread_fn(); });
 	}
 
@@ -289,6 +364,9 @@ public:
 
 		std::cout << "\n";
 	}
+
+	ProgressPrinter(const ProgressPrinter &) = delete;
+	ProgressPrinter & operator=(const ProgressPrinter &) = delete;
 };
 
 
